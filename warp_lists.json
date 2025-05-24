@@ -1,0 +1,16 @@
+{
+    "broodmother": {
+        "enabled": true,
+        "players": [
+            "SkillAvg50",
+            "noobmaster666go"
+        ]
+    },
+    "protector": {
+        "enabled": true,
+        "players": [
+            "SkillAvg50",
+            "noobmaster666go"
+        ]
+    }
+}

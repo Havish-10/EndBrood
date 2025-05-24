@@ -1,0 +1,8 @@
+{
+    "name": "EndBrood",
+    "creator": "Life",
+    "version": "1.0.0",
+    "entry": "index.js",
+    "description": "A ChatTriggers module for Minecraft 1.8.9",
+    "requires": ["requestV2"]
+}
