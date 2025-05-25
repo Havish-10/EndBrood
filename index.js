@@ -93,6 +93,40 @@ let location_cycle_timer = null;
 let current_location = "top"; // can be "top" or "drag"
 let warp_in_progress = false; // Track if we're in the middle of a warp
 
+// Message indices for cycling through different messages
+let toggle_on_index = 0;
+let toggle_off_index = 0;
+
+// Arrays of messages for toggling on/off
+const TOGGLE_ON_MESSAGES = [
+    "Welcome aboard the %boss% team! You're now on the list.",
+    "You've been added to the %boss% squad! Ready for action.",
+    "You're in! %boss% list has been updated with your name.",
+    "Successfully joined the %boss% roster! Let's do this.",
+    "You're now part of the %boss% crew! Good luck!"
+];
+
+const TOGGLE_OFF_MESSAGES = [
+    "You've been removed from the %boss% list. See you next time!",
+    "Taking a break? You're no longer on the %boss% list.",
+    "Successfully left the %boss% team. Thanks for participating!",
+    "You've been taken off the %boss% roster. Come back soon!",
+    "Removed from the %boss% squad. Until next time!"
+];
+
+// Function to get next message and cycle through arrays
+function getNextMessage(isAdding, bossType) {
+    if (isAdding) {
+        const message = TOGGLE_ON_MESSAGES[toggle_on_index].replace('%boss%', bossType);
+        toggle_on_index = (toggle_on_index + 1) % TOGGLE_ON_MESSAGES.length;
+        return message;
+    } else {
+        const message = TOGGLE_OFF_MESSAGES[toggle_off_index].replace('%boss%', bossType);
+        toggle_off_index = (toggle_off_index + 1) % TOGGLE_OFF_MESSAGES.length;
+        return message;
+    }
+}
+
 // Constants
 const PARTY_WARP_DELAY = 5000; // 5 seconds after party creation before warping
 const PARTY_DISBAND_DELAY = 5000; // 5 seconds after warp before disbanding
@@ -276,6 +310,45 @@ function cycleLocation() {
 }
 
 // Command to toggle cycling
+// Handle !end and !brood commands from chat
+register("chat", (event) => {
+    const message = ChatLib.removeFormatting(event);
+    
+    // Check if it's a private message or party chat with a command
+    let match = message.match(/^From \[.+\] ([\w]+): !([\w]+)$/) || // Private message
+                 message.match(/^Party > \[.+\] ([\w]+): !([\w]+)$/);  // Party chat
+    
+    if (!match) return;
+    
+    const [, playerName, command] = match;
+    const lists = loadWarpLists();
+    
+    // Don't process our own commands
+    if (playerName === Player.getName()) return;
+    
+    const cmd = command.toLowerCase();
+    if (cmd === "end" || cmd === "brood") {
+        const listType = cmd === "end" ? "protector" : "broodmother";
+        const playerIndex = lists[listType].players.indexOf(playerName);
+        
+        if (playerIndex === -1) {
+            // Add player to list
+            lists[listType].players.push(playerName);
+            if (saveWarpLists(lists)) {
+                ChatLib.chat(`&aAdded &f${playerName}&a to ${listType} warp list`);
+                ChatLib.command(`w ${playerName} ${getNextMessage(true, listType)}`);
+            }
+        } else {
+            // Remove player from list
+            lists[listType].players.splice(playerIndex, 1);
+            if (saveWarpLists(lists)) {
+                ChatLib.chat(`&aRemoved &f${playerName}&a from ${listType} warp list`);
+                ChatLib.command(`w ${playerName} ${getNextMessage(false, listType)}`);
+            }
+        }
+    }
+}).setCriteria("${message}");
+
 register("command", () => {
     cycling_enabled = !cycling_enabled;
     
