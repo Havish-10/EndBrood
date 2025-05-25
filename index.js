@@ -234,42 +234,6 @@ register("chat", (event) => {
     }
 }).setCriteria("${message}");
 
-// Additional specific handlers for important messages
-register("chat", () => {
-    if (!cycling_enabled || !waiting_for_protector) return;
-    
-    ChatLib.chat("&7[Debug] Protector rising, preparing party...");
-    const lists = loadWarpLists();
-    if (lists.protector.enabled && lists.protector.players.length > 0) {
-        handleParty(lists.protector.players, "protector");
-    }
-}).setCriteria("The ground begins to shake as an Endstone Protector rises from below!");
-
-register("chat", () => {
-    if (!cycling_enabled) return;
-    
-    waiting_for_protector = false;
-    ChatLib.chat("&7[Debug] Protector fully spawned");
-}).setCriteria("The Protector has spawned!");
-
-register("chat", () => {
-    if (!cycling_enabled) return;
-    
-    ChatLib.chat("&7[Debug] Protector killed, waiting before resuming cycle...");
-    protector_state = "Dead";
-    waiting_for_protector = false;
-    
-    // Wait 5 seconds before resuming cycle to avoid instant warping
-    setTimeout(() => {
-        if (cycling_enabled) {
-            ChatLib.chat("&7[Debug] Resuming normal cycle...");
-            // Force location to drag so next cycle goes to top
-            current_location = "drag";
-            cycleLocation();
-        }
-    }, 5000);
-}).setCriteria("ENDSTONE PROTECTOR DOWN!");
-
 
 
 // Function to cycle locations
@@ -380,10 +344,26 @@ function checkBossStates() {
         if (lists.protector.enabled && lists.protector.players.length > 0) {
             if (newProtectorState.includes("Awakening")) {
                 waiting_for_protector = true;
-                ChatLib.chat("&7[Debug] Protector awakening, waiting for spawn message...");
+                ChatLib.chat("&7[Debug] Protector awakening, waiting for spawn...");
             } else if (newProtectorState.includes("Summoned")) {
                 ChatLib.chat("&7[Debug] Protector summoned, starting immediate party...");
+                waiting_for_protector = false;
                 handleParty(lists.protector.players, "protector");
+            } else if (newProtectorState === "Dead" || newProtectorState === "None") {
+                if (waiting_for_protector) {
+                    ChatLib.chat("&7[Debug] Protector killed, waiting before resuming cycle...");
+                    waiting_for_protector = false;
+                    
+                    // Wait 5 seconds before resuming cycle to avoid instant warping
+                    setTimeout(() => {
+                        if (cycling_enabled) {
+                            ChatLib.chat("&7[Debug] Resuming normal cycle...");
+                            // Force location to drag so next cycle goes to top
+                            current_location = "drag";
+                            cycleLocation();
+                        }
+                    }, 5000);
+                }
             }
         }
     }
