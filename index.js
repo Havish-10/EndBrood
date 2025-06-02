@@ -92,6 +92,7 @@ let cycling_enabled = false;
 let location_cycle_timer = null;
 let current_location = "top"; // can be "top" or "drag"
 let warp_in_progress = false; // Track if we're in the middle of a warp
+let downtime_scheduled = false; // Track if downtime is scheduled for next party
 
 // Message indices for cycling through different messages
 let toggle_on_index = 0;
@@ -168,12 +169,25 @@ function saveWarpLists(data) {
 
 // Function to cleanup party state
 function cleanupParty() {
+    party_in_progress = false;
+    party_members_joined.clear();
     if (party_timeout) {
         clearTimeout(party_timeout);
         party_timeout = null;
     }
-    ChatLib.command("p disband");
-    party_in_progress = false;
+    
+    // If downtime is scheduled, send message and disable cycling
+    if (downtime_scheduled) {
+        ChatLib.command("pc Bot entering rest mode to avoid detection. Will resume operations soon.");
+        setTimeout(() => {
+            ChatLib.command("p disband");
+            cycling_enabled = false;
+            downtime_scheduled = false;
+            ChatLib.chat("&cBot has entered rest mode. Use /cycle to resume operations.");
+        }, 1000);
+    } else {
+        ChatLib.command("p disband");
+    }
     
     // Resume location cycling after party cleanup
     if (cycling_enabled && !location_cycle_timer) {
@@ -268,6 +282,20 @@ register("chat", (event) => {
     }
 }).setCriteria("${message}");
 
+// Handle server restart message
+register("chat", (event) => {
+    if (!cycling_enabled) return;
+    
+    const message = ChatLib.removeFormatting(event);
+    if (message.includes("Server will restart soon")) {
+        ChatLib.chat("&7[Debug] Server restart detected, resuming warp cycle...");
+        waiting_for_broodmother = false;
+        waiting_for_protector = false;
+        if (!party_in_progress && !location_cycle_timer) {
+            cycleLocation();
+        }
+    }
+}).setCriteria("${message}");
 
 
 // Function to cycle locations
@@ -344,6 +372,12 @@ register("chat", (event) => {
             if (saveWarpLists(lists)) {
                 ChatLib.chat(`&aRemoved &f${playerName}&a from ${listType} warp list`);
                 ChatLib.command(`w ${playerName} ${getNextMessage(false, listType)}`);
+                
+                // Check if both lists are now empty
+                if (lists.broodmother.players.length === 0 && lists.protector.players.length === 0 && cycling_enabled) {
+                    ChatLib.chat("&7[Debug] Both lists are empty, disabling cycling...");
+                    ChatLib.command("cycle");
+                }
             }
         }
     }
@@ -395,8 +429,14 @@ function checkBossStates() {
         }
 
         const lists = loadWarpLists();
-        if (lists.broodmother.enabled && lists.broodmother.players.length > 0) {
-            if (newBroodState.includes("Imminent")) {
+        if (lists.broodmother.enabled) {
+            if (lists.broodmother.players.length === 0) {
+                // If no players in list, don't wait at any state
+                waiting_for_broodmother = false;
+                if (!waiting_for_protector && !party_in_progress && !location_cycle_timer) {
+                    cycleLocation();
+                }
+            } else if (newBroodState.includes("Imminent")) {
                 ChatLib.chat("&7[Debug] Broodmother imminent, holding position until spawn...");
                 waiting_for_broodmother = true;
             } else if (newBroodState.includes("Alive")) {
@@ -414,8 +454,14 @@ function checkBossStates() {
         ChatLib.chat(`§4Protector§r: ${newProtectorState}`);
 
         const lists = loadWarpLists();
-        if (lists.protector.enabled && lists.protector.players.length > 0) {
-            if (newProtectorState.includes("Awakening")) {
+        if (lists.protector.enabled) {
+            if (lists.protector.players.length === 0) {
+                // If no players in list, don't wait at any state
+                waiting_for_protector = false;
+                if (!waiting_for_broodmother && !party_in_progress && !location_cycle_timer) {
+                    cycleLocation();
+                }
+            } else if (newProtectorState.includes("Awakening")) {
                 waiting_for_protector = true;
                 ChatLib.chat("&7[Debug] Protector awakening, waiting for spawn...");
             } else if (newProtectorState.includes("Summoned")) {
@@ -530,6 +576,17 @@ register("command", () => {
     ChatLib.chat(`&7Cycling: ${cycling_enabled ? "&aEnabled" : "&cDisabled"}&r`);
 }).setName("checkboss");
 
+// Command to schedule downtime after next party
+register("command", () => {
+    if (!cycling_enabled) {
+        ChatLib.chat("&cCannot schedule downtime while cycling is disabled");
+        return;
+    }
+    
+    downtime_scheduled = true;
+    ChatLib.chat("&6Downtime scheduled. Bot will enter rest mode after next party completion.");
+}).setName("dt");
+
 // Command to show help
 register("command", () => {
     ChatLib.chat("&7=== EndBrood Commands ===");
@@ -540,4 +597,5 @@ register("command", () => {
     ChatLib.chat("&6/warplist&7 - Show current warp lists");
     ChatLib.chat("&6/warptoggle <brood|prot>&7 - Toggle warp list on/off");
     ChatLib.chat("&6/endbroodhelp&7 - Show this help message");
+    ChatLib.chat("&6/dt&7 - Schedule bot downtime after next party");
 }).setName("endbroodhelp");
